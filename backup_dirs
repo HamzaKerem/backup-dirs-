@@ -1,0 +1,97 @@
+#!/bin/bash
+#create a gzipped tarball for the following dirs, and then move the tarball to "$HOME/backup_archive" or setup directories and install packages for a fresh distro install
+
+setup_dirs_arr=("$HOME/backup_archive" "$HOME/Programming" "$HOME/Programming/C_Projects" "$HOME/Programming/Java_Projects" "$HOME/Programming/Bash_Scripts" "$HOME/Programming/Python_Scripts" "$HOME/Music" "$HOME/Documents" "$HOME/Documents/pdfs" "$HOME/dotfiles" "$HOME/heavy_data" "$HOME/heavy_data/iso" "$HOME/heavy_data/misc")
+dirs_to_backup=("$HOME/Programming" "$HOME/dotfiles" "$HOME/Documents")
+dotfiles_to_backup=("$HOME/.bashrc" "$HOME/.vimrc")
+packages_to_install=("vim" "gcc" "openssh-server" "snap" "cmus" "hexchat" "git" "curl" "make" "tor" "python" "ffmpeg") 
+
+function show_usage(){
+	echo "backup_dirs: backup_dirs <MODE>"
+	echo "MODE: full - full backup, setup - setup files and directories from backup, <directory> - backup given directory only."
+	exit 1
+}
+
+function parse_arg(){
+	[[ -z "$arg" ]] && show_usage
+	
+	case "$arg" in
+		"setup") setup_dirs; install_packages;;
+		"full") tar_all_files;;
+		*) check_for_dirname;;
+	esac
+}
+
+function check_for_dirname(){
+	
+	valid_dirname=1
+
+	#create dotfiles if arg is dotfiles
+	[[ "$arg" == "dotfiles" || "$arg" == "dotfiles/" ]] && clear_and_add_dotfiles
+
+	for ((i=0; i<${#dirs_to_backup[@]}; i++)); do
+		[[ "$arg" == "$(basename "${dirs_to_backup["$i"]}")" || "$arg" == "$(basename "${dirs_to_backup["$i"]}")/" ]] && valid_dirname=0 && target_file="${dirs_to_backup["$i"]}"
+	done	
+	
+	((valid_dirname==1)) && show_usage
+	echo "$target_file"
+
+	tar_dir "$target_file"
+}
+
+function tar_all_files(){
+
+	#clear backup dirs
+	for file in "$HOME/backup_archive"/*; do
+		rm -rf "$file"
+	done
+
+	clear_and_add_dotfiles
+	
+	#tar directories
+	for ((i=0; i<${#dirs_to_backup[@]}; i++)); do
+		tar_dir "${dirs_to_backup["$i"]}"
+	done
+}
+
+function clear_and_add_dotfiles(){
+	for file in "$HOME/dotfiles"/*; do
+		rm -rf "$file"
+	done
+
+	#create dotfiles dir 
+	for ((i=0; i<${#dotfiles_to_backup[@]}; i++)); do
+		cp -r "${dotfiles_to_backup["$i"]}" "$HOME/dotfiles"
+	done
+}
+
+function tar_dir(){
+	[[ -e "$HOME/backup_archive/$(basename "$1").tgz" ]] && rm -rf "$HOME/backup_archive/$(basename "$1").tgz"
+	tar -cvzf "$HOME/backup_archive/$(basename "$1").tgz" "$1"	
+}
+
+function setup_dirs(){
+	#create crontab TODO
+
+	#create standard directories
+	for ((i=0; i<${#setup_dirs_arr[@]}; i++)); do
+		[[ ! -d "${setup_dirs_arr["$i"]}" ]] && mkdir "${setup_dirs_arr["$i"]}"
+	done
+
+}
+
+function install_packages(){
+
+	[[ "$UID" != "0" ]] && echo "Must run as root to install packages" && exit 1
+
+	for ((i=0; i<${#packages_to_install[@]}; i++)); do
+			[[ -z "$(which "${packages_to_install["$i"]}")" ]] && apt install "${packages_to_install["$i"]}" -y
+	done
+
+	#install youtube-dl
+	[[ -z "$(which youtube-dl)" ]] && curl -L https://yt-dl.org/downloads/latest/youtube-dl -o /usr/local/bin/youtube-dl &&
+	chmod a+rx /usr/local/bin/youtube-dl	
+}
+
+arg="$1"
+parse_arg
